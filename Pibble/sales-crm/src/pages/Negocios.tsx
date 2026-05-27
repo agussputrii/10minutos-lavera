@@ -121,10 +121,11 @@ export default function Negocios() {
   // ── Data fetching ──────────────────────────────────────────
   async function fetchNegocios() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('negocios')
-      .select('*, vendedor:profiles!negocios_vendedor_id_fkey(id,nombre,apellido,avatar_color,rol)')
+      .select('*, vendedor:profiles!vendedor_id(id,nombre,apellido,avatar_color,rol)')
       .order('updated_at', { ascending: false })
+    if (error) console.error('[fetchNegocios]', error)
     setNegocios((data as Negocio[]) ?? [])
     setLoading(false)
   }
