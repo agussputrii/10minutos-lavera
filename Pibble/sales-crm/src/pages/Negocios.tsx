@@ -97,6 +97,7 @@ export default function Negocios() {
   const [fFuentes, setFFuentes]         = useState<string[]>([])
   const [fCategorias, setFCategorias]   = useState<string[]>([])
   const [fEtiquetas, setFEtiquetas]     = useState<string[]>([])
+  const [ocultarTomados, setOcultarTomados] = useState(false)
 
   // Modal / form
   const [showModal, setShowModal] = useState(false)
@@ -156,6 +157,10 @@ export default function Negocios() {
 
   // Filtered list
   const filtered = negocios.filter(n => {
+    if (ocultarTomados) {
+      const isTomado = n.vendedor_id !== profile!.id && n.vendedor?.rol === 'vendedor'
+      if (isTomado) return false
+    }
     if (search) {
       const q = search.toLowerCase()
       if (!(n.empresa.toLowerCase().includes(q)
@@ -254,6 +259,21 @@ export default function Negocios() {
           )}
         </div>
 
+        <div style={{ marginBottom: 18 }}>
+          <label onClick={() => { playClick(); setOcultarTomados(!ocultarTomados) }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+            <div style={{
+              width: 16, height: 16, borderRadius: 4,
+              border: `2px solid ${ocultarTomados ? '#ccff00' : '#2a2a3a'}`,
+              background: ocultarTomados ? '#ccff00' : 'transparent',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.12s',
+            }}>
+              {ocultarTomados && <span style={{ fontSize: 9, color: '#000', fontWeight: 900 }}>✓</span>}
+            </div>
+            <span style={{ fontSize: 12, color: ocultarTomados ? '#fff' : '#888', fontWeight: 700 }}>Ocultar Tomados</span>
+          </label>
+        </div>
+
         <CheckGroup title="Estado" options={ESTADOS} selected={fEstados} onChange={setFEstados} />
         <CheckGroup title="Prioridad" options={PRIORIDADES} selected={fPrioridades} onChange={setFPrioridades} />
         <CheckGroup title="Fuente" options={FUENTES.map(f => ({ key: f, label: f[0].toUpperCase() + f.slice(1) }))} selected={fFuentes} onChange={setFFuentes} />
@@ -322,6 +342,11 @@ export default function Negocios() {
                       <span style={{ fontWeight: 800, fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.empresa}</span>
                       {n.prioridad === 'alta' && <span style={{ fontSize: 9 }}>🔴</span>}
                       <span style={{ fontSize: 10, background: estado.color + '1a', color: estado.color, borderRadius: 4, padding: '2px 6px', fontWeight: 700, flexShrink: 0 }}>{estado.label}</span>
+                      {n.vendedor_id !== profile!.id && n.vendedor?.rol === 'vendedor' && (
+                        <span style={{ fontSize: 9, background: 'rgba(255,68,68,0.15)', color: '#ff4444', borderRadius: 4, padding: '2px 5px', fontWeight: 800, border: '1px solid #ff444430', whiteSpace: 'nowrap' }}>
+                          ⚠️ Tomado por {n.vendedor?.nombre}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 11, color: '#68687a', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       {n.contacto && <span>👤 {n.contacto}</span>}
