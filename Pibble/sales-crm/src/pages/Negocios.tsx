@@ -123,7 +123,7 @@ export default function Negocios() {
     setLoading(true)
     const { data } = await supabase
       .from('negocios')
-      .select('*, vendedor:negocios_vendedor_id_fkey(id,nombre,apellido,avatar_color,rol), asignado:negocios_asignado_a_fkey(id,nombre,apellido,avatar_color)')
+      .select('*, vendedor:profiles!negocios_vendedor_id_fkey(id,nombre,apellido,avatar_color,rol)')
       .order('updated_at', { ascending: false })
     setNegocios((data as Negocio[]) ?? [])
     setLoading(false)
@@ -540,11 +540,7 @@ export default function Negocios() {
                 <option key={v.id} value={v.id}>{v.nombre} {v.apellido}</option>
               ))}
             </select>
-            {selected.asignado && (
-              <div style={{ fontSize:11, color:'#00c851', marginTop:4 }}>
-                ✓ Asignado a {(selected.asignado as Profile).nombre} {(selected.asignado as Profile).apellido}
-              </div>
-            )}
+            {selected.asignado_a && (() => { const v = vendors.find(x => x.id === selected.asignado_a); return v ? <div style={{ fontSize:11, color:'#00c851', marginTop:4 }}>✓ {v.nombre} {v.apellido}</div> : null })()}
           </div>
 
           {/* Actions */}
