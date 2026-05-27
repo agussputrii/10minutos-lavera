@@ -123,7 +123,7 @@ export default function Negocios() {
     setLoading(true)
     const { data, error } = await supabase
       .from('negocios')
-      .select('*, vendedor:profiles!vendedor_id(id,nombre,apellido,avatar_color,rol)')
+      .select('*')
       .order('updated_at', { ascending: false })
     if (error) console.error('[fetchNegocios]', error)
     setNegocios((data as Negocio[]) ?? [])
@@ -426,11 +426,7 @@ export default function Negocios() {
                       <span style={{ fontWeight: 800, fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.empresa}</span>
                       {n.prioridad === 'alta' && <span style={{ fontSize: 9 }}>🔴</span>}
                       <span style={{ fontSize: 10, background: estado.color + '1a', color: estado.color, borderRadius: 4, padding: '2px 6px', fontWeight: 700, flexShrink: 0 }}>{estado.label}</span>
-                      {n.vendedor_id !== profile!.id && n.vendedor?.rol === 'vendedor' && (
-                        <span style={{ fontSize: 9, background: 'rgba(255,68,68,0.15)', color: '#ff4444', borderRadius: 4, padding: '2px 5px', fontWeight: 800, border: '1px solid #ff444430', whiteSpace: 'nowrap' }}>
-                          ⚠️ Tomado por {n.vendedor?.nombre}
-                        </span>
-                      )}
+                      {n.vendedor_id !== profile!.id && (() => { const v = vendors.find(x => x.id === n.vendedor_id); return v?.rol === 'vendedor' ? <span style={{ fontSize:9, background:'rgba(255,68,68,0.15)', color:'#ff4444', borderRadius:4, padding:'2px 5px', fontWeight:800, border:'1px solid #ff444430', whiteSpace:'nowrap' }}>⚠️ Tomado por {v.nombre}</span> : null })()}
                     </div>
                     <div style={{ fontSize: 11, color: '#68687a', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       {n.contacto && <span>👤 {n.contacto}</span>}
@@ -449,9 +445,7 @@ export default function Negocios() {
                   {/* Right */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     {n.monto_estimado ? <div style={{ fontSize: 12, fontWeight: 800, color: '#ccff00' }}>{fmtMonto(n.monto_estimado)}</div> : null}
-                    {n.vendedor && (
-                      <div style={{ fontSize: 10, color: '#555' }}>{(n.vendedor as { nombre: string; apellido: string }).nombre}</div>
-                    )}
+                    {(() => { const v = vendors.find(x => x.id === n.vendedor_id); return v ? <div style={{ fontSize:10, color:'#555' }}>{v.nombre}</div> : null })()}
                     <div style={{ fontSize: 10, color: '#333', marginTop: 2 }}>{timeAgo(n.ultimo_contacto ?? n.created_at)}</div>
                   </div>
                 </div>
