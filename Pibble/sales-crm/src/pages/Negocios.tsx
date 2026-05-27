@@ -123,7 +123,7 @@ export default function Negocios() {
     setLoading(true)
     const { data } = await supabase
       .from('negocios')
-      .select('*, vendedor:profiles!vendedor_id(id,nombre,apellido,avatar_color), asignado:profiles!asignado_a(id,nombre,apellido,avatar_color)')
+      .select('*, vendedor:negocios_vendedor_id_fkey(id,nombre,apellido,avatar_color,rol), asignado:negocios_asignado_a_fkey(id,nombre,apellido,avatar_color)')
       .order('updated_at', { ascending: false })
     setNegocios((data as Negocio[]) ?? [])
     setLoading(false)
