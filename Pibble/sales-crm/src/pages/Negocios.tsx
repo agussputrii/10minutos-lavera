@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
-import { Negocio, NegocioNota, NegocioEstado, NegocioPrioridad, NotaTipo } from '../types'
+import { Negocio, NegocioNota, NegocioEstado, NegocioPrioridad, NotaTipo, Profile } from '../types'
 import { playClick, playXP, playError } from '../lib/sounds'
+import WhatsAppModal from '../components/WhatsAppModal'
 
 // ── Constants ────────────────────────────────────────────────
 const ESTADOS: { key: NegocioEstado; label: string; color: string }[] = [
@@ -89,6 +90,7 @@ export default function Negocios() {
   const [loading, setLoading]       = useState(true)
   const [selected, setSelected]     = useState<Negocio | null>(null)
   const [notas, setNotas]           = useState<NegocioNota[]>([])
+  const [vendors, setVendors]       = useState<Profile[]>([])
 
   // Filters
   const [search, setSearch]             = useState('')
@@ -98,6 +100,11 @@ export default function Negocios() {
   const [fCategorias, setFCategorias]   = useState<string[]>([])
   const [fEtiquetas, setFEtiquetas]     = useState<string[]>([])
   const [ocultarTomados, setOcultarTomados] = useState(false)
+
+  // Bulk + WA + Vista
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [showWA, setShowWA]             = useState(false)
+  const [vista, setVista]               = useState<'lista' | 'mapa'>('lista')
 
   // Modal / form
   const [showModal, setShowModal] = useState(false)
@@ -114,13 +121,23 @@ export default function Negocios() {
   // ── Data fetching ──────────────────────────────────────────
   async function fetchNegocios() {
     setLoading(true)
-    let q = supabase
+    const { data } = await supabase
       .from('negocios')
-      .select('*, vendedor:profiles(id,nombre,apellido,avatar_color)')
+      .select('*, vendedor:profiles!vendedor_id(id,nombre,apellido,avatar_color), asignado:profiles!asignado_a(id,nombre,apellido,avatar_color)')
       .order('updated_at', { ascending: false })
-    const { data } = await q
     setNegocios((data as Negocio[]) ?? [])
     setLoading(false)
+  }
+
+  async function fetchVendors() {
+    const { data } = await supabase.from('profiles').select('id,nombre,apellido,avatar_color,rol').order('nombre')
+    setVendors((data as Profile[]) ?? [])
+  }
+
+  async function assignVendor(negocioId: string, vendorId: string | null) {
+    await supabase.from('negocios').update({ asignado_a: vendorId, updated_at: new Date().toISOString() }).eq('id', negocioId)
+    playXP()
+    fetchNegocios()
   }
 
   async function fetchNotas(negocioId: string) {
@@ -134,6 +151,7 @@ export default function Negocios() {
 
   useEffect(() => {
     fetchNegocios()
+    fetchVendors()
 
     const channel = supabase
       .channel('negocios-realtime')
@@ -288,22 +306,82 @@ export default function Negocios() {
       {/* MAIN LIST */}
       <div style={{ flex: 1, paddingLeft: 24, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexShrink: 0, flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#fff' }}>Negocios 🏢</h1>
-            <p style={{ margin: 0, fontSize: 11, color: '#68687a' }}>{filtered.length} de {negocios.length} negocios</p>
+            <p style={{ margin: 0, fontSize: 11, color: '#68687a' }}>{filtered.length} de {negocios.length} · {bulkSelected.size > 0 && <span style={{ color:'#ccff00' }}>{bulkSelected.size} seleccionados</span>}</p>
           </div>
           <div style={{ flex: 1 }} />
+
+          {/* Vista toggle */}
+          <div style={{ display:'flex', borderRadius:8, overflow:'hidden', border:'1px solid #1e1e2e' }}>
+            {(['lista','mapa'] as const).map(v => (
+              <button key={v} onClick={() => { playClick(); setVista(v) }}
+                style={{ padding:'7px 12px', fontSize:11, fontWeight:800, border:'none', cursor:'pointer', background: vista===v ? '#ccff00' : '#111', color: vista===v ? '#000' : '#68687a' }}>
+                {v === 'lista' ? '☰ Lista' : '🗺️ Mapa'}
+              </button>
+            ))}
+          </div>
+
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..."
-            style={{ background: '#111', border: '1px solid #222', borderRadius: 8, padding: '8px 13px', color: '#fff', fontSize: 13, width: 210, outline: 'none' }} />
+            style={{ background: '#111', border: '1px solid #1e1e2e', borderRadius: 8, padding: '7px 12px', color: '#fff', fontSize: 12, width: 180, outline: 'none' }} />
+
+          {/* Bulk WA button */}
+          {bulkSelected.size > 0 && (
+            <button onClick={() => { playClick(); setShowWA(true) }}
+              style={{ background:'#00c851', border:'none', borderRadius:8, padding:'8px 14px', fontWeight:900, fontSize:12, cursor:'pointer', color:'#000', whiteSpace:'nowrap' }}>
+              💬 WA ({bulkSelected.size})
+            </button>
+          )}
+          {bulkSelected.size > 0 && (
+            <button onClick={() => setBulkSelected(new Set())}
+              style={{ background:'rgba(255,68,68,0.08)', border:'1px solid rgba(255,68,68,0.2)', borderRadius:8, padding:'8px 10px', fontSize:11, color:'#ff4444', cursor:'pointer', fontWeight:700 }}>
+              ✕ Limpiar
+            </button>
+          )}
+
           <button onClick={() => { playClick(); setForm({ ...EMPTY_FORM }); setEditMode(false); setShowModal(true) }}
-            style={{ background: 'linear-gradient(135deg,#ccff00,#88dd00)', color: '#000', border: 'none', borderRadius: 8, padding: '9px 18px', fontWeight: 900, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            style={{ background: 'linear-gradient(135deg,#ccff00,#88dd00)', color: '#000', border: 'none', borderRadius: 8, padding: '8px 16px', fontWeight: 900, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             + Nuevo
           </button>
         </div>
 
+        {/* Select all bar */}
+        {filtered.length > 0 && vista === 'lista' && (
+          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexShrink:0 }}>
+            <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:11, color:'#68687a' }} onClick={playClick}>
+              <div style={{ width:14, height:14, borderRadius:3, border:`2px solid ${bulkSelected.size === filtered.length ? '#ccff00' : '#2a2a3a'}`, background: bulkSelected.size === filtered.length ? '#ccff00' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}
+                onClick={() => setBulkSelected(bulkSelected.size === filtered.length ? new Set() : new Set(filtered.map(n=>n.id)))}>
+                {bulkSelected.size === filtered.length && <span style={{ fontSize:8, color:'#000', fontWeight:900 }}>✓</span>}
+              </div>
+              Seleccionar todos ({filtered.length})
+            </label>
+            {filtered.filter(n=>n.telefono).length > 0 && bulkSelected.size === 0 && (
+              <button onClick={() => { playClick(); setBulkSelected(new Set(filtered.filter(n=>n.telefono).map(n=>n.id))); }}
+                style={{ fontSize:11, color:'#00c851', background:'none', border:'none', cursor:'pointer', fontWeight:700 }}>
+                Solo con teléfono ({filtered.filter(n=>n.telefono).length})
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* MAP VIEW */}
+        {vista === 'mapa' && (
+          <div style={{ flex:1, borderRadius:12, overflow:'hidden', border:'1px solid #1e1e2e', position:'relative' }}>
+            <iframe
+              title="Mapa negocios"
+              src={`https://www.openstreetmap.org/export/embed.html?bbox=-69.05,-33.05,-68.65,-32.7&layer=mapnik`}
+              style={{ width:'100%', height:'100%', border:'none', filter:'invert(0.9) hue-rotate(180deg)' }}
+            />
+            <div style={{ position:'absolute', top:10, left:10, right:10, background:'rgba(0,0,0,0.85)', borderRadius:8, padding:'10px 14px', fontSize:11, color:'#ccc', border:'1px solid #222' }}>
+              🗺️ <strong style={{color:'#ccff00'}}>{filtered.filter(n=>n.latitud).length}</strong> negocios con coordenadas en Las Heras, Mendoza.{' '}
+              <a href={`https://www.google.com/maps/search/negocios+Las+Heras+Mendoza`} target="_blank" rel="noreferrer" style={{color:'#00f0ff'}}>Ver en Google Maps →</a>
+            </div>
+          </div>
+        )}
+
         {/* List */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {vista === 'lista' && <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7 }}>
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#68687a', marginTop: 40 }}>
               <div style={{ width: 18, height: 18, border: '2px solid #222', borderTopColor: '#ccff00', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -332,6 +410,11 @@ export default function Negocios() {
                     borderRadius: 9, padding: '12px 14px', cursor: 'pointer', transition: 'all 0.12s',
                     display: 'flex', gap: 12, alignItems: 'center',
                   }}>
+                  {/* Checkbox bulk */}
+                  <div onClick={e => { e.stopPropagation(); const ns = new Set(bulkSelected); ns.has(n.id) ? ns.delete(n.id) : ns.add(n.id); setBulkSelected(ns) }}
+                    style={{ width:18, height:18, borderRadius:4, border:`2px solid ${bulkSelected.has(n.id) ? '#00c851' : '#2a2a3a'}`, background: bulkSelected.has(n.id) ? '#00c851' : 'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, cursor:'pointer', transition:'all 0.12s' }}>
+                    {bulkSelected.has(n.id) && <span style={{ fontSize:10, color:'#000', fontWeight:900 }}>✓</span>}
+                  </div>
                   {/* Avatar */}
                   <div style={{ width: 38, height: 38, borderRadius: 9, background: estado.color + '18', border: `2px solid ${estado.color}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 900, color: estado.color, flexShrink: 0 }}>
                     {n.empresa[0].toUpperCase()}
@@ -374,7 +457,8 @@ export default function Negocios() {
               )
             })
           )}
-        </div>
+        </div>}
+
       </div>
 
       {/* DETAIL PANEL */}
@@ -397,13 +481,14 @@ export default function Negocios() {
           </div>
 
           {/* Quick actions */}
-          {(selected.telefono || selected.maps_url) && (
-            <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-              {selected.telefono && <a href={`tel:${selected.telefono}`} style={{ flex: 1, textAlign: 'center', background: '#111', border: '1px solid #1e1e2e', borderRadius: 7, padding: '7px 2px', fontSize: 11, color: '#00f0ff', textDecoration: 'none', fontWeight: 700 }}>📞 Llamar</a>}
-              {selected.telefono && <a href={`https://wa.me/${selected.telefono.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#111', border: '1px solid #1e1e2e', borderRadius: 7, padding: '7px 2px', fontSize: 11, color: '#00c851', textDecoration: 'none', fontWeight: 700 }}>💬 WA</a>}
-              {selected.maps_url && <a href={selected.maps_url} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#111', border: '1px solid #1e1e2e', borderRadius: 7, padding: '7px 2px', fontSize: 11, color: '#ff8800', textDecoration: 'none', fontWeight: 700 }}>📍 Maps</a>}
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+            {selected.telefono && <a href={`tel:${selected.telefono}`} style={{ flex: 1, textAlign: 'center', background: '#111', border: '1px solid #1e1e2e', borderRadius: 7, padding: '7px 4px', fontSize: 11, color: '#00f0ff', textDecoration: 'none', fontWeight: 700 }}>📞 Llamar</a>}
+            {selected.telefono && (
+              <button onClick={() => { playClick(); setBulkSelected(new Set()); setShowWA(true) }}
+                style={{ flex: 1, textAlign: 'center', background: '#111', border: '1px solid rgba(0,200,81,0.3)', borderRadius: 7, padding: '7px 4px', fontSize: 11, color: '#00c851', cursor: 'pointer', fontWeight: 700 }}>💬 WA</button>
+            )}
+            {selected.maps_url && <a href={selected.maps_url} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', background: '#111', border: '1px solid #1e1e2e', borderRadius: 7, padding: '7px 4px', fontSize: 11, color: '#ff8800', textDecoration: 'none', fontWeight: 700 }}>📍 Maps</a>}
+          </div>
 
           {/* Details */}
           <div style={{ background: '#0d0d16', borderRadius: 8, padding: 12, marginBottom: 12 }}>
@@ -443,6 +528,24 @@ export default function Negocios() {
               <div style={{ fontSize: 11, color: '#aaa', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{selected.notas}</div>
             </div>
           )}
+
+          {/* Asignar vendedor */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 9, color: '#68687a', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>Asignado a</div>
+            <select value={selected.asignado_a ?? ''}
+              onChange={e => { playClick(); assignVendor(selected.id, e.target.value || null) }}
+              style={{ width:'100%', background:'#111', border:'1px solid #1e1e2e', borderRadius:7, padding:'8px 10px', color:'#ccc', fontSize:12, outline:'none' }}>
+              <option value="">— Sin asignar —</option>
+              {vendors.map(v => (
+                <option key={v.id} value={v.id}>{v.nombre} {v.apellido}</option>
+              ))}
+            </select>
+            {selected.asignado && (
+              <div style={{ fontSize:11, color:'#00c851', marginTop:4 }}>
+                ✓ Asignado a {(selected.asignado as Profile).nombre} {(selected.asignado as Profile).apellido}
+              </div>
+            )}
+          </div>
 
           {/* Actions */}
           <div style={{ display: 'flex', gap: 7, marginBottom: 16 }}>
@@ -498,6 +601,15 @@ export default function Negocios() {
             </div>
           )}
         </aside>
+      )}
+
+      {/* WHATSAPP MODAL */}
+      {showWA && (
+        <WhatsAppModal
+          negocios={bulkSelected.size > 0 ? negocios.filter(n => bulkSelected.has(n.id)) : selected ? [selected] : []}
+          vendedorNombre={`${profile?.nombre ?? ''} ${profile?.apellido ?? ''}`.trim()}
+          onClose={() => setShowWA(false)}
+        />
       )}
 
       {/* MODAL */}
