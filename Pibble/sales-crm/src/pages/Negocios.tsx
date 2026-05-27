@@ -63,7 +63,7 @@ function CheckGroup<T extends string>({
         {title}
       </div>
       {options.map(o => (
-        <label key={o.key} onClick={playClick}
+        <label key={o.key} onClick={() => { playClick(); toggle(o.key) }}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', cursor: 'pointer', userSelect: 'none' }}>
           <div style={{
             width: 16, height: 16, borderRadius: 4,
@@ -151,7 +151,7 @@ export default function Negocios() {
   useEffect(() => { selected ? fetchNotas(selected.id) : setNotas([]) }, [selected])
 
   // Dynamic filter options
-  const allCategorias = [...new Set(negocios.map(n => n.categoria).filter(Boolean) as string[])].sort()
+  const allCategorias = [...new Set(negocios.map(n => n.categoria).filter(Boolean).map(c => c!.trim()).filter(c => !/^\d+/.test(c)) as string[])].sort()
   const allEtiquetas  = [...new Set(negocios.flatMap(n => n.etiquetas))].sort()
 
   // Filtered list
@@ -326,7 +326,7 @@ export default function Negocios() {
                     <div style={{ fontSize: 11, color: '#68687a', marginTop: 2, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                       {n.contacto && <span>👤 {n.contacto}</span>}
                       {n.telefono && <span>📞 {n.telefono}</span>}
-                      {n.categoria && <span style={{ color: '#555' }}>{n.categoria}</span>}
+                      {n.categoria && !/^\d+/.test(n.categoria) && <span style={{ color: '#555' }}>{n.categoria}</span>}
                     </div>
                     {n.etiquetas.length > 0 && (
                       <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
